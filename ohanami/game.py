@@ -3,12 +3,15 @@ from abc import (
     ABC,
     abstractmethod,
 )
+from copy import deepcopy
 from dataclasses import (
     dataclass,
     field,
 )
 from enum import Enum
 import random
+
+from ohanami.display import ODisplay
 
 
 class OColor(Enum):
@@ -19,9 +22,9 @@ class OColor(Enum):
 
 
 class OSeason(Enum):
-    FIRST: int = 1
-    SECOND: int = 2
-    THIRD: int = 3
+    FIRST: int = 0
+    SECOND: int = 1
+    THIRD: int = 2
 
 
 # fmt: off
@@ -75,22 +78,42 @@ class OPile:
         """Get the number of cards of a certain type."""
         return len([card for card in self.cards if card.color is color])
 
-    def get_score(self, season: OSeason) -> int:
+    def get_scores(self, season: OSeason) -> dict[OColor, int]:
         """Get the score for a certain season."""
-        match season:
-            case OSeason.FIRST:
-                return 3 * self.get_color(OColor.WATER)
-            case OSeason.SECOND:
-                return 3 * self.get_color(OColor.WATER) + 4 * self.get_color(
-                    OColor.LEAF
-                )
-            case OSeason.THIRD:
-                return (
-                    3 * self.get_color(OColor.WATER)
-                    + 4 * self.get_color(OColor.LEAF)
-                    + 7 * self.get_color(OColor.STONE)
-                    + sum([i for i in range(1, self.get_color(OColor.SAKURA) + 1)])
-                )
+        scores = {OColor.WATER: 3 * self.get_color(OColor.WATER)}
+        if season is OSeason.SECOND or season is OSeason.THIRD:
+            scores[OColor.LEAF] = 4 * self.get_color(OColor.LEAF)
+        if season is OSeason.THIRD:
+            scores[OColor.STONE] = 7 * self.get_color(OColor.STONE)
+            scores[OColor.SAKURA] = sum(
+                [i for i in range(1, self.get_color(OColor.SAKURA) + 1)]
+            )
+        return scores
+
+    def add(self, card: OCard, noob: bool = False) -> bool:
+        """Add a card to this pile.
+
+        Returns:
+            True if able to add, False otherwise.
+        """
+        if not self.cards:
+            self.cards.append(card)
+            print(f"-Added new pile with card {card}")
+            return True
+        if card.value < self.min:
+            print(f"-Added card {card} to pile {self.min} -> {self.max}")
+            self.cards.insert(0, card)
+        elif card.value > self.max:
+            print(f"-Added card {card} to pile {self.min} -> {self.max}")
+            self.cards.append(card)
+        else:
+            if noob:
+                print(f"-Throwing card {card} (noob).")
+                return False
+            raise ValueError(
+                f"Card {card} cannot be placed in pile {', '.join([str(card) for card in self.cards])}."
+            )
+        return True
 
 
 @dataclass
@@ -99,46 +122,41 @@ class OPlayer:
 
     backend: "OBackend"
     name: str
-    score: int = 0
+    scores: list[dict[OColor, int]] = field(
+        default_factory=lambda: [
+            {OColor.WATER: 0, OColor.LEAF: 0, OColor.STONE: 0, OColor.SAKURA: 0}
+            for _ in range(3)
+        ]
+    )
     piles: tuple[OPile, OPile, OPile] = field(
         default_factory=lambda: (OPile(), OPile(), OPile())
     )
     hand: list[OCard] = field(default_factory=list)
 
+    @property
+    def score(self) -> int:
+        return sum([sum(turn.values()) for turn in self.scores])
+
     def play(self, game: "OGame") -> None:
-        played_cards = self.backend.play(list(self.hand), self.piles, game)
+        played_cards = self.backend.play(list(self.hand), deepcopy(self.piles), game)
         for npile, card in played_cards:
             self.hand.remove(card)
             if npile is None:
-                print(f"Throwing card {card}")
+                print(f"-Throwing card {card}")
                 game.discarded_cards.append(card)
                 continue
             pile = self.piles[npile]
-            if not pile.cards:
-                pile.cards.append(card)
-                print(f"Added new pile with card {card}")
-            else:
-                if card.value < pile.min:
-                    print(f"Added card {card} to pile {pile.min} -> {pile.max}")
-                    pile.cards.insert(0, card)
-                elif card.value > pile.max:
-                    print(f"Added card {card} to pile {pile.min} -> {pile.max}")
-                    pile.cards.append(card)
-                else:
-                    if self.backend.noob:
-                        print(f"Throwing card {card} (noob).")
-                        game.discarded_cards.append(card)
-                        continue
-                    raise ValueError(
-                        f"Card {card} cannot be placed in pile {', '.join([str(card) for card in pile.cards])}."
-                    )
+            if not pile.add(card, noob=self.backend.noob):
+                game.discarded_cards.append(card)
 
 
 @dataclass
 class OGame:
     """Class defining an ohanami game."""
 
+    display: ODisplay | None
     players: list[OPlayer]
+    finished: bool = False
     current_player: OPlayer | None = None
     current_turn: int = 0
     current_season: OSeason = OSeason.FIRST
@@ -148,7 +166,7 @@ class OGame:
     @classmethod
     def create(cls, players: "list[OBackend]") -> "OGame":
         """Create a new game."""
-        game = cls([])
+        game = cls(None, [])
         deck = create_deck()
         random.shuffle(deck)
         for backend in players:
@@ -165,6 +183,14 @@ class OGame:
         game.remaining_deck = deck
         random.shuffle(game.players)
         return game
+
+    def start(self) -> None:
+        if self.display:
+            self.display.main()
+            return
+        print(f"Starting at season {self.current_season}")
+        while not self.finished:
+            self.turn()
 
     def turn(self) -> None:
         """Run a complete turn."""
@@ -188,15 +214,21 @@ class OGame:
     def go_next_season(self) -> None:
         for player in self.players:
             for pile in player.piles:
-                player.score += pile.get_score(self.current_season)
+                for color, score in pile.get_scores(self.current_season).items():
+                    player.scores[self.current_season.value][color] += score
+        self.current_turn = 0
         match self.current_season:
             case OSeason.FIRST:
                 self.current_season = OSeason.SECOND
+                print()
+                print(f"# Switching to season {self.current_season}")
                 for player in self.players:
                     player.hand = self.remaining_deck[:10]
                     self.remaining_deck = self.remaining_deck[10:]
             case OSeason.SECOND:
                 self.current_season = OSeason.THIRD
+                print()
+                print(f"# Switching to season {self.current_season}")
                 for player in self.players:
                     player.hand = self.remaining_deck[:10]
                     self.remaining_deck = self.remaining_deck[10:]
@@ -204,7 +236,42 @@ class OGame:
                 self.conclude()
 
     def conclude(self) -> None:
-        pass
+        print()
+        print("# Concluding")
+        self.finished = True
+        self.display_scores()
+
+    def display_scores(self) -> None:
+        data = {}
+        max_score = max([player.score for player in self.players])
+        for player in self.players:
+            name = f"*{player.name}" if player.score == max_score else player.name
+            data[name] = [
+                f"{player.scores[0][OColor.WATER]:2d}",
+                f"{player.scores[1][OColor.WATER]:2d}/{player.scores[1][OColor.WATER]:2d}",
+                (
+                    f"{player.scores[2][OColor.WATER]:2d}/{player.scores[2][OColor.WATER]:3d}"
+                    f"/{player.scores[2][OColor.STONE]:3d}/{player.scores[2][OColor.SAKURA]:3d}"
+                ),
+                f"={player.score}",
+            ]
+        names_width = 0
+        col_widths = [0 for _ in range(len(list(data.values())[0]))]
+        for name, columns in data.items():
+            names_width = max(names_width, len(name)) + 1
+            for n_col, column in enumerate(columns):
+                col_widths[n_col] = max(col_widths[n_col], len(column))
+        lines = ["_" * (1 + names_width + 1)]
+        for col_width in col_widths:
+            lines[-1] += "_" * (col_width + 1)
+        for name, columns in data.items():
+            lines += [f"|{{0:{names_width}}}|".format(name)]
+            for column, col_width in zip(columns, col_widths):
+                lines[-1] += f"{{0:{col_width}}}|".format(column)
+        lines += ["|" + "_" * names_width + "|"]
+        for col_width in col_widths:
+            lines[-1] += "_" * col_width + "|"
+        print("\n".join(lines))
 
 
 def create_deck() -> list[OCard]:

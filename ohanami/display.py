@@ -15,8 +15,14 @@ if TYPE_CHECKING:
 
 @dataclass
 class ODisplay:
-    CARD_WIDTH = 8
+    HEIGHT: int
+    WIDTH: int
+
     CARD_HEIGHT = 7
+    CARD_WIDTH = 8
+
+    PLAYER_HEIGHT = 20
+    PLAYER_WIDTH = 50
 
     def __init__(self, game: "OGame") -> None:
         self.game = game
@@ -25,69 +31,74 @@ class ODisplay:
         curses.cbreak()
         self.stdscr.keypad(True)
 
-        self.center = (int(curses.LINES / 2), int(curses.COLS))
+        self.HEIGHT = curses.LINES
+        self.WIDTH = curses.COLS
+
+        self.center = (int(self.HEIGHT / 2), int(self.WIDTH))
 
         if len(game.players) > 4:
             raise ValueError("Cannot draw a game with more than 4 players.")
 
         self.center_window = curses.newwin(
-            int(curses.LINES / 2),
-            int(curses.COLS / 2),
-            int(curses.LINES / 4),
-            int(curses.COLS / 4),
+            int(self.HEIGHT / 2),
+            int(self.WIDTH / 2),
+            int(self.HEIGHT / 4),
+            int(self.WIDTH / 4),
         )
         self.players_windows: list[curses._CursesWindow] = []
         for n_player, player in enumerate(self.game.players):
-            width = 30
-            height = 12
             match n_player:
                 case 0:
                     self.players_windows.append(
                         curses.newwin(
-                            height,
-                            width,
+                            self.PLAYER_HEIGHT,
+                            self.PLAYER_WIDTH,
                             0,
-                            int((curses.COLS - width) / 2),
+                            int((self.WIDTH - self.PLAYER_WIDTH) / 2),
                         )
                     )
                 case 1:
                     self.players_windows.append(
                         curses.newwin(
-                            width,
-                            height,
-                            int((curses.LINES - width) / 2),
-                            curses.COLS - height,
+                            self.PLAYER_WIDTH,
+                            self.PLAYER_HEIGHT,
+                            int((self.HEIGHT - self.PLAYER_WIDTH) / 2),
+                            self.WIDTH - self.PLAYER_HEIGHT,
                         )
                     )
                 case 2:
                     self.players_windows.append(
                         curses.newwin(
-                            height,
-                            width,
-                            int(curses.LINES - height),
-                            int((curses.COLS - width) / 2),
+                            self.PLAYER_HEIGHT,
+                            self.PLAYER_WIDTH,
+                            int(self.HEIGHT - self.PLAYER_HEIGHT),
+                            int((self.WIDTH - self.PLAYER_WIDTH) / 2),
                         )
                     )
                 case 3:
                     self.players_windows.append(
                         curses.newwin(
-                            width,
-                            height,
-                            int((curses.LINES - width) / 2),
+                            self.PLAYER_WIDTH,
+                            self.PLAYER_HEIGHT,
+                            int((self.HEIGHT - self.PLAYER_WIDTH) / 2),
                             0,
                         )
                     )
-            height, width = self.players_windows[-1].getmaxyx()
-            self.players_windows[-1].addstr(0, int(width / 2), player.name)
+            self.players_windows[-1].addch(str(n_player))
             self.players_windows[-1].refresh()
 
-        self.main()
+        self.stdscr.addstr(int(self.HEIGHT / 2), int(self.WIDTH / 2), "OHANAMI")
+        self.stdscr.refresh()
 
     def main(self) -> None:
         while True:
             c = self.stdscr.getch()
             if c == ascii.ESC:
+                print("here")
                 self.exit()
+                break
+            if c == ord("t"):
+                self.game.turn()
 
     def exit(self) -> None:
         curses.nocbreak()
