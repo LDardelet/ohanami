@@ -1,5 +1,7 @@
 import curses
 
+from curses import ascii
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -23,10 +25,69 @@ class ODisplay:
         curses.cbreak()
         self.stdscr.keypad(True)
 
-        self.size = (curses.LINES, curses.COLS)
+        self.center = (int(curses.LINES / 2), int(curses.COLS))
 
         if len(game.players) > 4:
             raise ValueError("Cannot draw a game with more than 4 players.")
+
+        self.center_window = curses.newwin(
+            int(curses.LINES / 2),
+            int(curses.COLS / 2),
+            int(curses.LINES / 4),
+            int(curses.COLS / 4),
+        )
+        self.players_windows: list[curses._CursesWindow] = []
+        for n_player, player in enumerate(self.game.players):
+            width = 30
+            height = 12
+            match n_player:
+                case 0:
+                    self.players_windows.append(
+                        curses.newwin(
+                            height,
+                            width,
+                            0,
+                            int((curses.COLS - width) / 2),
+                        )
+                    )
+                case 1:
+                    self.players_windows.append(
+                        curses.newwin(
+                            width,
+                            height,
+                            int((curses.LINES - width) / 2),
+                            curses.COLS - height,
+                        )
+                    )
+                case 2:
+                    self.players_windows.append(
+                        curses.newwin(
+                            height,
+                            width,
+                            int(curses.LINES - height),
+                            int((curses.COLS - width) / 2),
+                        )
+                    )
+                case 3:
+                    self.players_windows.append(
+                        curses.newwin(
+                            width,
+                            height,
+                            int((curses.LINES - width) / 2),
+                            0,
+                        )
+                    )
+            height, width = self.players_windows[-1].getmaxyx()
+            self.players_windows[-1].addstr(0, int(width / 2), player.name)
+            self.players_windows[-1].refresh()
+
+        self.main()
+
+    def main(self) -> None:
+        while True:
+            c = self.stdscr.getch()
+            if c == ascii.ESC:
+                self.exit()
 
     def exit(self) -> None:
         curses.nocbreak()

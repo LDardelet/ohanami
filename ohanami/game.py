@@ -50,24 +50,30 @@ class OCard:
 
 
 @dataclass
-class OPiles:
-    @staticmethod
-    def create_pile() -> tuple[list[OCard], list[OCard], list[OCard]]:
-        return ([], [], [])
+class OPile:
+    cards: list[OCard] = field(default_factory=list)
 
-    piles: tuple[list[OCard], list[OCard], list[OCard]] = field(
-        default_factory=create_pile
-    )
+    @property
+    def min(self) -> int:
+        """Return the minimum value of a pile.
 
-    def __getitem__(self, index: int) -> list[OCard]:
-        return self.piles[index]
+        Returns 121 if not card in the pile."""
+        if not self.cards:
+            return 121
+        return self.cards[0].value
+
+    @property
+    def max(self) -> int:
+        """Return the maximum value of a pile.
+
+        Returns 0 if not card in the pile."""
+        if not self.cards:
+            return 0
+        return self.cards[-1].value
 
     def get_color(self, color: OColor) -> int:
         """Get the number of cards of a certain type."""
-        n_cards = 0
-        for pile in self.piles:
-            n_cards += len([card for card in pile if card.color is color])
-        return n_cards
+        return len([card for card in self.cards if card.color is color])
 
     def get_score(self, season: OSeason) -> int:
         """Get the score for a certain season."""
@@ -94,7 +100,9 @@ class OPlayer:
     backend: "OBackend"
     name: str
     score: int = 0
-    piles: OPiles = field(default_factory=lambda: OPiles())
+    piles: tuple[OPile, OPile, OPile] = field(
+        default_factory=lambda: (OPile(), OPile(), OPile())
+    )
     hand: list[OCard] = field(default_factory=list)
 
     def play(self, game: "OGame") -> None:
@@ -106,27 +114,23 @@ class OPlayer:
                 game.discarded_cards.append(card)
                 continue
             pile = self.piles[npile]
-            if not pile:
-                pile.append(card)
+            if not pile.cards:
+                pile.cards.append(card)
                 print(f"Added new pile with card {card}")
             else:
-                if card.value < pile[0].value:
-                    print(
-                        f"Added card {card} to pile {pile[0].value} -> {pile[-1].value}"
-                    )
-                    pile.insert(0, card)
-                elif card.value > pile[-1].value:
-                    print(
-                        f"Added card {card} to pile {pile[0].value} -> {pile[-1].value}"
-                    )
-                    pile.append(card)
+                if card.value < pile.min:
+                    print(f"Added card {card} to pile {pile.min} -> {pile.max}")
+                    pile.cards.insert(0, card)
+                elif card.value > pile.max:
+                    print(f"Added card {card} to pile {pile.min} -> {pile.max}")
+                    pile.cards.append(card)
                 else:
                     if self.backend.noob:
                         print(f"Throwing card {card} (noob).")
                         game.discarded_cards.append(card)
                         continue
                     raise ValueError(
-                        f"Card {card} cannot be placed in pile {', '.join([str(card) for card in pile])}."
+                        f"Card {card} cannot be placed in pile {', '.join([str(card) for card in pile.cards])}."
                     )
 
 
@@ -183,7 +187,8 @@ class OGame:
 
     def go_next_season(self) -> None:
         for player in self.players:
-            player.score += player.piles.get_score(self.current_season)
+            for pile in player.piles:
+                player.score += pile.get_score(self.current_season)
         match self.current_season:
             case OSeason.FIRST:
                 self.current_season = OSeason.SECOND
@@ -218,7 +223,7 @@ class OBackend(ABC):
     def play(
         self,
         cards: list[OCard],
-        piles: OPiles,
+        piles: tuple[OPile, OPile, OPile],
         game: OGame,
     ) -> tuple[tuple[int | None, OCard], tuple[int | None, OCard]]:
         raise NotImplementedError
