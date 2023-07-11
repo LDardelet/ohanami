@@ -1,8 +1,4 @@
 """Ohanami game core module."""
-from abc import (
-    ABC,
-    abstractmethod,
-)
 from copy import deepcopy
 from dataclasses import (
     dataclass,
@@ -11,6 +7,10 @@ from dataclasses import (
 from enum import Enum
 import random
 
+from ohanami.players import (
+    AVAILABLE_PLAYERS,
+    OBackend,
+)
 from ohanami.display import ODisplay
 
 
@@ -164,12 +164,14 @@ class OGame:
     discarded_cards: list[OCard] = field(default_factory=list)
 
     @classmethod
-    def create(cls, players: "list[OBackend]") -> "OGame":
+    def create(cls, players: "list[OBackend | None]") -> "OGame":
         """Create a new game."""
         game = cls(None, [])
         deck = create_deck()
         random.shuffle(deck)
         for backend in players:
+            if backend is None:
+                backend = random.choice(AVAILABLE_PLAYERS)()
             ID = 1
             name = f"{backend.__class__.__name__}_{ID}"
             while (
@@ -280,17 +282,3 @@ def create_deck() -> list[OCard]:
     for color, values in DECK.items():
         cards += [OCard(value, color) for value in values]
     return cards
-
-
-class OBackend(ABC):
-    # If True, registers a card placed on an invalid deck as a discard
-    noob: bool = False
-
-    @abstractmethod
-    def play(
-        self,
-        cards: list[OCard],
-        piles: tuple[OPile, OPile, OPile],
-        game: OGame,
-    ) -> tuple[tuple[int | None, OCard], tuple[int | None, OCard]]:
-        raise NotImplementedError
