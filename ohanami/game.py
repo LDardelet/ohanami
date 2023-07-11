@@ -122,6 +122,7 @@ class OPlayer:
 
     backend: "OBackend"
     name: str
+    discarded_cards: list[OCard] = field(default_factory=list)
     scores: list[dict[OColor, int]] = field(
         default_factory=lambda: [
             {OColor.WATER: 0, OColor.LEAF: 0, OColor.STONE: 0, OColor.SAKURA: 0}
@@ -139,15 +140,17 @@ class OPlayer:
 
     def play(self, game: "OGame") -> None:
         played_cards = self.backend.play(list(self.hand), deepcopy(self.piles), game)
-        for npile, card in played_cards:
+        for npile, played_card in played_cards:
+            print(played_card, self.hand)
+            card = next(card for card in self.hand if card.value == played_card.value)
             self.hand.remove(card)
             if npile is None:
                 print(f"-Throwing card {card}")
-                game.discarded_cards.append(card)
+                self.discarded_cards.append(card)
                 continue
             pile = self.piles[npile]
             if not pile.add(card, noob=self.backend.noob):
-                game.discarded_cards.append(card)
+                self.discarded_cards.append(card)
 
 
 @dataclass
@@ -161,7 +164,6 @@ class OGame:
     current_turn: int = 0
     current_season: OSeason = OSeason.FIRST
     remaining_deck: list[OCard] = field(default_factory=list)
-    discarded_cards: list[OCard] = field(default_factory=list)
 
     @classmethod
     def create(cls, players: "list[OBackend | None]") -> "OGame":
@@ -256,6 +258,7 @@ class OGame:
                     f"/{player.scores[2][OColor.STONE]:3d}/{player.scores[2][OColor.SAKURA]:3d}"
                 ),
                 f"={player.score}",
+                f"x{len(player.discarded_cards)} cards",
             ]
         names_width = 0
         col_widths = [0 for _ in range(len(list(data.values())[0]))]
