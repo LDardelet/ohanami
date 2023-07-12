@@ -97,3 +97,35 @@ class BetterBeSafe(OBackend):
             (first_pile_i, first_card),
             (second_pile_i, second_card),
         )
+
+
+class Centrist(OBackend):
+    """Plays the centermost (relative to 60) cards playable."""
+
+    def play(
+        self, cards: "list[OCard]", piles: "tuple[OPile, OPile, OPile]", game: "OGame"
+    ) -> "tuple[tuple[int | None, OCard], tuple[int | None, OCard]]":
+        cards = [card for card in sorted(cards, key=lambda card: abs(card.value - 60))]
+        selected_cards: list[tuple[int | None, OCard]] = []
+        for card in cards:
+            best_pile = self.get_closest_pile(card, piles)
+            if best_pile is not None:
+                selected_cards.append((best_pile, card))
+                if len(selected_cards) == 2:
+                    return (selected_cards[0], selected_cards[1])
+                piles[best_pile].add(card)
+        while len(selected_cards) != 2:
+            selected_cards.append(
+                (
+                    None,
+                    next(
+                        card
+                        for card in cards
+                        if not any(
+                            selected_card is card
+                            for selected_pile, selected_card in selected_cards
+                        )
+                    ),
+                )
+            )
+        return (selected_cards[0], selected_cards[1])
