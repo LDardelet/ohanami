@@ -52,6 +52,13 @@ class OCard:
     color: OColor
 
 
+def create_empty_scoreboard() -> list[dict[OColor, int]]:
+    return [
+        {OColor.WATER: 0, OColor.LEAF: 0, OColor.STONE: 0, OColor.SAKURA: 0}
+        for _ in range(3)
+    ]
+
+
 @dataclass
 class OPile:
     cards: list[OCard] = field(default_factory=list)
@@ -98,17 +105,13 @@ class OPile:
         """
         if not self.cards:
             self.cards.append(card)
-            print(f"-Added new pile with card {card}")
             return True
         if card.value < self.min:
-            print(f"-Added card {card} to pile {self.min} -> {self.max}")
             self.cards.insert(0, card)
         elif card.value > self.max:
-            print(f"-Added card {card} to pile {self.min} -> {self.max}")
             self.cards.append(card)
         else:
             if backend is not None and backend.noob:
-                print(f"-Throwing card {card} (noob).")
                 return False
             raise ValueError(
                 f"Card {card.value} cannot be placed in pile {', '.join([str(card.value) for card in self.cards])} ({backend.__class__.__name__})."
@@ -123,12 +126,7 @@ class OPlayer:
     backend: "OBackend"
     name: str
     discarded_cards: list[OCard] = field(default_factory=list)
-    scores: list[dict[OColor, int]] = field(
-        default_factory=lambda: [
-            {OColor.WATER: 0, OColor.LEAF: 0, OColor.STONE: 0, OColor.SAKURA: 0}
-            for _ in range(3)
-        ]
-    )
+    scores: list[dict[OColor, int]] = field(default_factory=create_empty_scoreboard)
     piles: tuple[OPile, OPile, OPile] = field(
         default_factory=lambda: (OPile(), OPile(), OPile())
     )
@@ -141,11 +139,9 @@ class OPlayer:
     def play(self, game: "OGame") -> None:
         played_cards = self.backend.play(list(self.hand), deepcopy(self.piles), game)
         for npile, played_card in played_cards:
-            print(played_card, self.hand)
             card = next(card for card in self.hand if card.value == played_card.value)
             self.hand.remove(card)
             if npile is None:
-                print(f"-Throwing card {card}")
                 self.discarded_cards.append(card)
                 continue
             pile = self.piles[npile]
@@ -169,8 +165,6 @@ class OGame:
     def create(cls, players: "list[OBackend | None]") -> "OGame":
         """Create a new game."""
         game = cls(None, [])
-        deck = create_deck()
-        random.shuffle(deck)
         for backend in players:
             if backend is None:
                 backend = random.choice(AVAILABLE_PLAYERS)()
@@ -182,19 +176,37 @@ class OGame:
             ):
                 ID += 1
                 name = f"{backend.__class__.__name__}_{ID}"
-            game.players.append(OPlayer(backend, name, hand=deck[:10]))
-            deck = deck[10:]
-        game.remaining_deck = deck
+            game.players.append(OPlayer(backend, name))
         random.shuffle(game.players)
         return game
 
+    def deal_cards(self) -> None:
+        deck = create_deck()
+        random.shuffle(deck)
+        for player in self.players:
+            player.hand = deck[:10]
+            deck = deck[10:]
+        self.remaining_deck = deck
+
     def start(self) -> None:
+        self.deal_cards()
         if self.display:
             self.display.main()
             return
-        print(f"Starting at season {self.current_season}")
         while not self.finished:
             self.turn()
+
+    def reset(self) -> None:
+        for player in self.players:
+            player.scores = create_empty_scoreboard()
+            player.hand = []
+            for pile in player.piles:
+                pile.cards = []
+            player.discarded_cards = []
+        self.current_player = None
+        self.current_season = OSeason.FIRST
+        self.current_turn = 0
+        self.finished = False
 
     def turn(self) -> None:
         """Run a complete turn."""
@@ -202,7 +214,6 @@ class OGame:
             self.current_player = self.players[0]
         self.current_turn += 1
         for player in self.players:
-            print(f"{player.name} is playing.")
             player.play(self)
         if self.current_season is OSeason.SECOND:
             hand = self.players[0].hand
@@ -224,15 +235,11 @@ class OGame:
         match self.current_season:
             case OSeason.FIRST:
                 self.current_season = OSeason.SECOND
-                print()
-                print(f"# Switching to season {self.current_season}")
                 for player in self.players:
                     player.hand = self.remaining_deck[:10]
                     self.remaining_deck = self.remaining_deck[10:]
             case OSeason.SECOND:
                 self.current_season = OSeason.THIRD
-                print()
-                print(f"# Switching to season {self.current_season}")
                 for player in self.players:
                     player.hand = self.remaining_deck[:10]
                     self.remaining_deck = self.remaining_deck[10:]

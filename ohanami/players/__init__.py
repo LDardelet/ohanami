@@ -6,4 +6,9 @@ from ohanami.players.heuristics import (
 )
 from ohanami.players.random import RandomRetardPlayer
 
-AVAILABLE_PLAYERS = [RandomRetardPlayer, AlwaysSmall, BetterBeSafe, Centrist]
+AVAILABLE_PLAYERS: list[type[OBackend]] = [
+    RandomRetardPlayer,
+    AlwaysSmall,
+    BetterBeSafe,
+    Centrist,
+]
