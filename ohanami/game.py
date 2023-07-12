@@ -90,7 +90,7 @@ class OPile:
             )
         return scores
 
-    def add(self, card: OCard, noob: bool = False) -> bool:
+    def add(self, card: OCard, backend: "OBackend | None" = None) -> bool:
         """Add a card to this pile.
 
         Returns:
@@ -107,11 +107,11 @@ class OPile:
             print(f"-Added card {card} to pile {self.min} -> {self.max}")
             self.cards.append(card)
         else:
-            if noob:
+            if backend is not None and backend.noob:
                 print(f"-Throwing card {card} (noob).")
                 return False
             raise ValueError(
-                f"Card {card} cannot be placed in pile {', '.join([str(card) for card in self.cards])}."
+                f"Card {card.value} cannot be placed in pile {', '.join([str(card.value) for card in self.cards])} ({backend.__class__.__name__})."
             )
         return True
 
@@ -149,7 +149,7 @@ class OPlayer:
                 self.discarded_cards.append(card)
                 continue
             pile = self.piles[npile]
-            if not pile.add(card, noob=self.backend.noob):
+            if not pile.add(card, backend=self.backend):
                 self.discarded_cards.append(card)
 
 

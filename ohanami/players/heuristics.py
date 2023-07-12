@@ -1,36 +1,9 @@
-import random
-
 from typing import TYPE_CHECKING
+
+from ohanami.players.base import OBackend
 
 if TYPE_CHECKING:
     from ohanami.game import OCard, OGame, OPile
-
-
-class OBackend:
-    # If True, registers a card placed on an invalid deck as a discard
-    noob: bool = False
-
-    def play(
-        self,
-        cards: "list[OCard]",
-        piles: "tuple[OPile, OPile, OPile]",
-        game: "OGame",
-    ) -> "tuple[tuple[int | None, OCard], tuple[int | None, OCard]]":
-        raise NotImplementedError
-
-
-class RandomRetardPlayer(OBackend):
-    noob = True
-
-    def play(
-        self, cards: "list[OCard]", piles: "tuple[OPile, OPile, OPile]", game: "OGame"
-    ) -> "tuple[tuple[int | None, OCard], tuple[int | None, OCard]]":
-        first_card = random.choice(cards)
-        cards = [card for card in cards if card is not first_card]
-        return (
-            (random.randint(0, 2), first_card),
-            (random.randint(0, 2), random.choice(cards)),
-        )
 
 
 class AlwaysSmall(OBackend):
@@ -40,9 +13,31 @@ class AlwaysSmall(OBackend):
         self, cards: "list[OCard]", piles: "tuple[OPile, OPile, OPile]", game: "OGame"
     ) -> "tuple[tuple[int | None, OCard], tuple[int | None, OCard]]":
         cards = [card for card in sorted(cards, key=lambda card: card.value)]
+        second_card, first_card = cards[:2]
+        max_diff, first_pile = (
+            122 if piles[0].min < first_card.value else piles[0].min - first_card.value,
+            0,
+        )
+        if (diff := piles[1].min - first_card.value) > 0 and diff < max_diff:
+            max_diff, first_pile = diff, 1
+        if (diff := piles[2].min - first_card.value) > 0 and diff < max_diff:
+            max_diff, first_pile = diff, 2
+        if max_diff < 120:
+            piles[first_pile].add(first_card)
+        max_diff, second_pile = (
+            122
+            if piles[0].min < second_card.value
+            else piles[0].min - second_card.value,
+            0,
+        )
+        if (diff := piles[1].min - second_card.value) > 0 and diff < max_diff:
+            max_diff, second_pile = diff, 1
+        if (diff := piles[2].min - second_card.value) > 0 and diff < max_diff:
+            max_diff, second_pile = diff, 2
+
         return (
-            (random.randint(0, 2), cards[1]),
-            (random.randint(0, 2), cards[0]),
+            (first_pile, first_card),
+            (second_pile, second_card),
         )
 
 
@@ -102,6 +97,3 @@ class BetterBeSafe(OBackend):
             (first_pile_i, first_card),
             (second_pile_i, second_card),
         )
-
-
-AVAILABLE_PLAYERS = [RandomRetardPlayer, AlwaysSmall, BetterBeSafe]
